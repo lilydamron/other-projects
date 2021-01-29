@@ -1,0 +1,289 @@
+---
+title: "NBA Last Two Minutes"
+output: html_document
+---
+
+```{r setup, echo=FALSE, message = FALSE, warning=FALSE, error = FALSE}
+rm(list = ls())
+require(dplyr)
+require(rvest)
+require(ggplot2)
+require(lubridate)
+require(tidyr)
+require(kableExtra)
+require(vembedr)
+require(plotly)
+require(knitr)
+
+#scrape nba season data off web
+
+#Create for loop to read in regular season record data
+
+#2017-2018 season
+url <- "https://www.basketball-reference.com/leagues/NBA_2018.html"
+webpage <- read_html(url)
+team_data_html <- html_nodes(webpage, '.standings_confs a')
+team_data <- html_text(team_data_html)
+team_data18 <- team_data[1:30]
+
+wins_data_html <- html_nodes(webpage, '.standings_confs .left+ .right')
+wins_data <- html_text(wins_data_html)
+wins_data18 <- wins_data[c(2:16, 18:32)]
+
+loss_data_html <- html_nodes(webpage, '.standings_confs .right:nth-child(3)')
+loss_data <- html_text(loss_data_html)
+loss_data18 <- loss_data[c(2:16, 18:32)]
+
+#2016-2017 season
+url <- "https://www.basketball-reference.com/leagues/NBA_2017.html"
+webpage <- read_html(url)
+team_data_html <- html_nodes(webpage, '.standings_confs a')
+team_data <- html_text(team_data_html)
+team_data17 <- team_data[1:30]
+
+wins_data_html <- html_nodes(webpage, '.standings_confs .left+ .right')
+wins_data <- html_text(wins_data_html)
+wins_data17 <- wins_data[c(2:16, 18:32)]
+
+loss_data_html <- html_nodes(webpage, '.standings_confs .right:nth-child(3)')
+loss_data <- html_text(loss_data_html)
+loss_data17 <- loss_data[c(2:16, 18:32)]
+
+#2015-2016 season
+url <- "https://www.basketball-reference.com/leagues/NBA_2016.html"
+webpage <- read_html(url)
+team_data_html <- html_nodes(webpage, '.standings_confs a')
+team_data <- html_text(team_data_html)
+team_data16 <- team_data[1:30]
+
+wins_data_html <- html_nodes(webpage, '.standings_confs .left+ .right')
+wins_data <- html_text(wins_data_html)
+wins_data16 <- wins_data[c(2:16, 18:32)]
+
+loss_data_html <- html_nodes(webpage, '.standings_confs .right:nth-child(3)')
+loss_data <- html_text(loss_data_html)
+loss_data16 <- loss_data[c(2:16, 18:32)]
+
+#combine all data into one data set
+team_data16 <- as.data.frame(team_data16)
+team_data17 <- as.data.frame(team_data17)
+team_data18 <- as.data.frame(team_data18)
+
+season16 <- data.frame(team = team_data16, wins16 = wins_data16, loss16 = loss_data16)
+season17 <- data.frame(team = team_data17, wins17 = wins_data17, loss17 = loss_data17) 
+season18 <- data.frame(team = team_data18, wins18 = wins_data18, loss18 = loss_data18)
+
+names(season16)[1] <- "team"
+names(season17)[1] <- "team"
+names(season18)[1] <- "team"
+
+seasons <- left_join(season16, season17, by = c("team"))
+seasons <- left_join(seasons, season18, by = c("team"))
+
+seasons <- seasons %>% mutate_at(c("wins16", "loss16",
+                                   "wins17", "loss17",
+                                   "wins18", "loss18"), as.numeric)
+
+#generate winning percentage for each year and overall
+seasons <- seasons %>% mutate(win_per16 = round(wins16 / (wins16 + loss16),2),
+                              win_per17 = round(wins17 / (wins17 + loss17), 2),
+                              win_per18 = round(wins18 / (wins18 + loss18), 2),
+                              win_per = round((wins16 + wins17 + wins18) / (wins16 + loss16 + wins17 + loss17 + wins18 + loss18), 2))
+
+#add 3 character team id to seasons data
+seasons <- seasons %>% mutate(team_id = case_when(team == "Boston Celtics" ~ "BOS",
+                                                  team == "Cleveland Cavaliers" ~ "CLE",
+                                                  team == "Toronto Raptors" ~ "TOR",
+                                                  team == "Washington Wizards" ~ "WAS",
+                                                  team == "Atlanta Hawks" ~ "ATL",
+                                                  team == "Milwaukee Bucks" ~ "MIL",
+                                                  team == "Indiana Pacers" ~ "IND",
+                                                  team == "Chicago Bulls" ~ "CHI",
+                                                  team == "Miami Heat" ~ "MIA",
+                                                  team == "Detroit Pistons" ~ "DET",
+                                                  team == "Charlotte Hornets" ~ "CHA",
+                                                  team == "New York Knicks" ~ "NYK",
+                                                  team == "Orlando Magic" ~ "ORL",
+                                                  team == "Philadelphia 76ers" ~ "PHI",
+                                                  team == "Brooklyn Nets" ~ "BKN",
+                                                  team == "Golden State Warriors" ~ "GSW",
+                                                  team == "San Antonio Spurs" ~ "SAS",
+                                                  team == "Houston Rockets" ~ "HOU",
+                                                  team == "Los Angeles Clippers" ~ "LAC",
+                                                  team == "Utah Jazz" ~ "UTA",
+                                                  team == "Oklahoma City Thunder" ~ "OKC",
+                                                  team == "Memphis Grizzlies" ~ "MEM",
+                                                  team == "Portland Trail Blazers" ~ "POR",
+                                                  team == "Denver Nuggets" ~ "DEN",
+                                                  team == "New Orleans Pelicans" ~ "NOP",
+                                                  team == "Dallas Mavericks" ~ "DAL",
+                                                  team == "Sacramento Kings" ~ "SAC",
+                                                  team == "Minnesota Timberwolves" ~ "MIN",
+                                                  team == "Los Angeles Lakers" ~ "LAL",
+                                                  team == "Phoenix Suns" ~ "PHO"
+                                                  ))
+
+#scrape playoff records for every team
+
+
+#Load NBA Last Two Minute Data
+nba <- read.csv("T:/Damron/nba_2_mins.csv", colClasses = "character")
+
+#remove records where review_decision is not CC, IC, CNC, INC
+nba_rel <- nba %>% filter(review_decision %in% c("CC", "IC", "INC", "CNC"))
+nba_rel <- nba_rel %>% mutate(yr = substring(nba_rel$date, 1, 4),
+                              mon = substring(nba_rel$date,5,6),
+                              day = substring(nba_rel$date,7,8))
+nba_rel$date <- as.Date(paste0(nba_rel$yr, "-", nba_rel$mon, "-", nba_rel$day), format = "%Y-%m-%d")
+
+#Limit Last Two Minute data to start at 15/16 season
+nba_rel <- nba_rel %>% filter(date >= "2015-10-01")
+
+#Create flag if it was playoff game
+nba_rel <- nba_rel %>% mutate(playoff_flg = case_when(date >= "2016-04-16" & date <= "2016-05-30" ~ 2016,
+                                                      date >= "2017-04-15" & date <= "2017-06-12" ~ 2017,
+                                                      date >= "2018-04-14" & date <= "2018-06-08" ~ 2018))
+
+#separate data into playoff vs. regular season
+nba_reg <- nba_rel %>% filter(is.na(playoff_flg))
+nba_playoff <- nba_rel %>% filter(!is.na(playoff_flg))
+
+#create season info for regular season data
+nba_reg <- nba_reg %>% mutate(season = case_when(date <= "2016-04-13" ~ 2016,
+                                                 date > "2016-04-13" & date <= "2017-04-12" ~ 2017,
+                                                 date > "2017-04-13" ~ 2018),
+                              correct_flg = case_when(review_decision == "CC" | review_decision == "CNC" ~ "correct",
+                                                      review_decision == "IC" | review_decision == "INC" ~ "incorrect",
+                                                      TRUE ~ NA_character_),
+                              seconds_left = as.numeric(seconds_left))
+
+nba_reg_daily <- nba_reg %>% group_by(date) %>% summarise(season = max(season),
+                                                          num_correct = sum(review_decision == "CC" | review_decision == "CNC"),
+                                                          num_incorrect = sum(review_decision == "IC" | review_decision == "INC"),
+                                                          correct_perc = round(num_correct / (num_correct + num_incorrect), 2))
+                                                    
+
+#aggregate data by team to see if they get more correct or incorrect calls
+teams_reg <- nba_reg %>% group_by(disadvantaged_team) %>% summarise(cc = sum(review_decision == "CC"),
+                                                                ic = sum(review_decision == "IC"),
+                                                                cnc = sum(review_decision == "CNC"),
+                                                                inc = sum(review_decision == "INC"),
+                                                                total = n(),
+                                                                correct = round((cc + cnc)/total,2),
+                                                                incorrect = round((ic + inc)/total, 2)) %>% filter(total > 100 & disadvantaged_team != "")
+#filtered to where they appeared more than 100 times
+
+#breakdown by team/year
+team_yr_reg <- nba_reg %>% group_by(disadvantaged_team, season) %>% summarise(cc = sum(review_decision == "CC"),
+                                                                      ic = sum(review_decision == "IC"),
+                                                                      cnc = sum(review_decision == "CNC"),
+                                                                      inc = sum(review_decision == "INC"),
+                                                                      total = n(),
+                                                                      num_games = n_distinct(game_id),
+                                                                      correct = (cc + cnc)/total,
+                                                                      incorrect = (ic + inc)/total) %>% filter(total >50 & disadvantaged_team != "")
+
+#combine this data with season records
+#first make season data long
+season_dat <- seasons %>% select(team, team_id, win_per16, win_per17, win_per18)
+season_long <- gather(season_dat, year, win_percentage, win_per16:win_per18)
+season_long <- season_long %>% mutate(yr = case_when(year == "win_per16" ~ 2016,
+                                                     year == "win_per17" ~ 2017,
+                                                     year == "win_per18" ~ 2018))
+
+call_season <- left_join(team_yr_reg, season_long, by = c("disadvantaged_team" = "team_id",
+                                                          "season" = "yr"))
+
+#weight correct percentage by how many games they appeared in the Last Two Minute Report
+call_season <- call_season %>% mutate(correct_weight = correct * num_games / 82,
+                                      incorrect_weight = incorrect * num_games / 82)
+
+#add team colors
+call_season <- call_season %>% mutate(color = case_when(disadvantaged_team == "ATL" ~ "#E03A3E",
+                                                        disadvantaged_team == "BKN" ~ "#000000",
+                                                        disadvantaged_team == "BOS" ~ "#007A33",
+                                                        disadvantaged_team == "CHA" ~ "#1D1160",
+                                                        disadvantaged_team == "CHI" ~ "#CE1141",
+                                                        disadvantaged_team == "CLE" ~ "#6F263D",
+                                                        disadvantaged_team == "DAL" ~ "#00538C",
+                                                        disadvantaged_team == "DEN" ~ "#0E2240",
+                                                        disadvantaged_team == "DET" ~ "#C8102E",
+                                                        disadvantaged_team == "GSW" ~ "#1D428A",
+                                                        disadvantaged_team == "HOU" ~ "#CE1141",
+                                                        disadvantaged_team == "IND" ~ "#002D62",
+                                                        disadvantaged_team == "LAC" ~ "#C8102E",
+                                                        disadvantaged_team == "LAL" ~ "#552583",
+                                                        disadvantaged_team == "MEM" ~ "#5D76A9",
+                                                        disadvantaged_team == "MIA" ~ "#98002E",
+                                                        disadvantaged_team == "MIL" ~ "#00471B",
+                                                        disadvantaged_team == "MIN" ~ "#0C2340",
+                                                        disadvantaged_team == "NOP" ~ "#0C2340",
+                                                        disadvantaged_team == "NYK" ~ "#006BB6",
+                                                        disadvantaged_team == "OKC" ~ "#007AC1",
+                                                        disadvantaged_team == "ORL" ~ "#0077C0",
+                                                        disadvantaged_team == "PHI" ~ "#006BB6",
+                                                        disadvantaged_team == "PHO" ~ "#1D1160",
+                                                        disadvantaged_team == "POR" ~ "#E03A3E",
+                                                        disadvantaged_team == "SAC" ~ "#5A2D81",
+                                                        disadvantaged_team == "SAS" ~ "#C4CED4",
+                                                        disadvantaged_team == "TOR" ~ "#CE1141",
+                                                        disadvantaged_team == "UTA" ~ "#002B5C",
+                                                        disadvantaged_team == "WAS" ~ "#002B5C"
+                                                      ))
+```
+
+## Background
+
+Beginning in March 2015, the NBA created the Last Two Minute Reports in an ongoing effort to build greater awareness and understanding of the rules and processes that govern the game. It serves as an accountability measure to the fans and media who do not always agree with the calls. The NBA released this data in part to show that their officials were correct roughly 90% of the time, despite the attention that a few incorrect calls will garner. The report is a play-by-play report regarding all calls and material non-calls in the last two minutes of the fourth quarter or any overtime period for all games that meet designated criteria (within 10 points prior to the 2017-19 season, within 3 points starting in the 2017-2018 season).
+
+
+## The Data
+
+The data contains information including how many seconds were left at the time of the call, the committing player, the disadvantaged player, the names of the referees of that game, and the decision on the call after review by the NBA's League Operations senior management team. The decisions are broken into four categories: Correct Call (CC), Incorrect Call (IC), Correct No Call (CNC), and Incorrect No Call (INC).
+
+
+```{r datasnapshot, echo=FALSE}
+set.seed(17)
+nba_reg %>% select(time, seconds_left, call_type, committing_player, disadvantaged_player, review_decision, date) %>% sample_n(10) %>% kable(row.names = FALSE) %>% kable_styling(bootstrap_options = c("striped", "hover", "responsive")) %>% column_spec(c(3,7), width = "10em") %>% row_spec(6, color = "white", background = "blue")
+
+```
+
+They even provide links to the video of the play in question.
+
+<video autosize: true controls>
+  <source src="T:/Damron/0021601112_1175_DF BCAST_1509kbps.mp4" type="video/mp4">
+</video>
+
+
+
+
+
+
+### Does the number of correct calls relate to the win percentage?
+
+If a team has a high percentage of correct calls, does that correlate to a higher winning percentage?
+
+
+Results are unclear...
+
+```{r pressure, echo=FALSE}
+p1 <- ggplot(call_season, aes(x = correct_weight, y = win_percentage, text = paste(team, season))) + geom_point() + xlab("Percentage of Correct Calls") + ylab("Winning Percentage") 
+p1 <- ggplotly(p1, tooltip = "text")
+p1
+```
+
+
+### Does the percentage of incorrect calls affect teams differently?
+Are there teams that receive a higher percentage of incorrect calls?
+
+```{r, echo=FALSE}
+q1 <- ggplot(call_season, aes(x = disadvantaged_team, y = incorrect_weight, text = median(incorrect_weight))) + geom_boxplot() + theme(axis.text.x = element_text(angle = 45)) + xlab("Disadvantaged Team") + ylab("Incorrect Call Percentage (Weighted)")
+#q1 <- ggplotly(q1, tooltip = "text")
+q1
+```
+
+
+
+
+
+
